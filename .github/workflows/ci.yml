@@ -21,7 +21,7 @@ jobs:
     name: Lint
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install linters
         run: brew install swiftlint ruff shellcheck actionlint
       - name: Lint
@@ -31,7 +31,7 @@ jobs:
     name: Unit tests
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: swift --version
       - name: Build
         run: swift build
@@ -42,7 +42,7 @@ jobs:
     name: Install from GOV.UK (network test)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Download, check and install Basic PAYE Tools into a temporary folder
         run: PAYE_LAUNCHER_NETWORK_TESTS=1 swift test --filter downloadsChecksAndInstallsFromGovUK
 
@@ -50,7 +50,7 @@ jobs:
     name: Build universal runtime
     runs-on: macos-15  # Apple Silicon
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rosetta 2 (for the x86_64 half)
         run: sudo softwareupdate --install-rosetta --agree-to-license || true
       - name: Cache source downloads
@@ -83,7 +83,7 @@ jobs:
       matrix:
         arch: [arm64, x86_64]  # x86_64 runs in Rosetta, as on an Intel Mac
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: native-runtime
@@ -107,7 +107,7 @@ jobs:
     needs: [runtime, unit-tests]
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
