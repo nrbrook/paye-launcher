@@ -38,11 +38,21 @@ jobs:
       - name: Test
         run: swift test
 
+  installer:
+    name: Install from GOV.UK (network test)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download, check and install Basic PAYE Tools into a temporary folder
+        run: PAYE_LAUNCHER_NETWORK_TESTS=1 swift test --filter downloadsChecksAndInstallsFromGovUK
+
   runtime:
-    name: Build native runtime
+    name: Build universal runtime
     runs-on: macos-15  # Apple Silicon
     steps:
       - uses: actions/checkout@v4
+      - name: Install Rosetta 2 (for the x86_64 half)
+        run: sudo softwareupdate --install-rosetta --agree-to-license || true
       - name: Cache source downloads
         uses: actions/cache@v4
         with:
@@ -62,12 +72,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runtime-build-logs
-          path: ${{ env.RUNTIME_WORK }}/logs
+          path: ${{ env.RUNTIME_WORK }}/*/logs
 
   compare:
-    name: Compare with HMRC's server
+    name: Compare with HMRC's server (${{ matrix.arch }})
     needs: runtime
     runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x86_64]  # x86_64 runs in Rosetta, as on an Intel Mac
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -80,12 +94,12 @@ jobs:
       - name: Install Basic PAYE Tools from GOV.UK
         run: scripts/fetch_bpt.sh
       - name: Compare
-        run: OUT="$RUNNER_TEMP/comparison" runtime/tests/run_comparison.sh "$RUNTIME_WORK/runtime"
+        run: OUT="$RUNNER_TEMP/comparison" RUNTIME_ARCH="${{ matrix.arch }}" runtime/tests/run_comparison.sh "$RUNTIME_WORK/runtime"
       - name: Upload results on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: comparison-results
+          name: comparison-results-${{ matrix.arch }}
           path: ${{ runner.temp }}/comparison
 
   package:

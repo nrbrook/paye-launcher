@@ -21,12 +21,12 @@ This page is for the Basic PAYE Tools team at HM Revenue & Customs.
 Your server bundle is x86_64 and needs Rosetta 2 on Apple Silicon. Your page
 notes that Apple will end support for Intel apps on Apple Silicon from autumn 2027.
 
-PAYE Launcher includes a native arm64 build of the open-source runtime that
-your server uses (Python 2.7.16 and the same versions of 4Suite-XML, Pillow,
+PAYE Launcher includes a universal (arm64 and x86_64) build of the open-source
+runtime that your server uses (Python 2.7.16 and the same versions of 4Suite-XML, Pillow,
 lxml and scandir). Your server code is Python bytecode, so it runs unchanged
 on this runtime: the runtime loads it from the installed app at run time.
 
-Each build compares the native runtime with your own server
+Each build compares both halves of this runtime with your own server
 ([testing.md](testing.md)): all reachable pages, static files, 1,620 net pay
 estimator results over two tax years, IRmark generation and backups. All are
 identical. A full employer and submission flow is not tested yet. It could be

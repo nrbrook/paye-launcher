@@ -20,7 +20,8 @@ PAYE Launcher replaces only the user interface (part 1). It contains no HMRC
 code. At each start it:
 
 1. Finds the newest installed Basic PAYE Tools (bundle identifier
-   `uk.gov.hmrc.bptrti`), so HMRC updates are used automatically.
+   `uk.gov.hmrc.bptrti`), so HMRC updates are used automatically. If there is
+   none, it offers to install it (see below).
 2. Reads the port from `~/HMRC/payetools-rti/bptshell-settings.ini` (default 46729).
 3. Runs the same server commands as HMRC's user interface does
    (found from the strings in HMRC's app and from the server's command list):
@@ -39,14 +40,16 @@ server always uses. PAYE Launcher never writes to the HMRC app.
 
 ## The two runtimes
 
-On an Intel Mac, PAYE Launcher runs HMRC's own `rti` executable.
+HMRC's `rti` is an Intel program. On Apple Silicon it needs Rosetta 2, and
+Apple plans to end Rosetta support for most Intel apps. PAYE Launcher therefore
+includes a **built-in runtime** and uses it by default on all Macs:
 
-On an Apple Silicon Mac, HMRC's `rti` is an Intel program that needs Rosetta 2.
-Apple plans to end Rosetta support for most Intel apps, so PAYE Launcher
-includes a **native runtime** and uses it by default:
-
-- **Python 2.7.16**, built for arm64 with UCS-2 strings (the same as HMRC's
-  build), with the Apple Silicon patches from pyenv.
+- It is **universal** (arm64 and x86_64), so the same tested runtime runs on
+  Apple Silicon and Intel Macs. `build_runtime.sh` builds each half
+  (`build_runtime_arch.sh`; the x86_64 half in Rosetta) and joins every binary
+  with `lipo`.
+- **Python 2.7.16**, with UCS-2 strings (the same as HMRC's build), with the
+  Apple Silicon patches from pyenv.
 - Native builds of the **open-source** packages that have C code, in the same
   versions as HMRC's app: 4Suite-XML 1.0.2, Pillow 6.2.2, lxml 4.5.2 and
   scandir 1.10.0.
@@ -61,9 +64,32 @@ py2app start-up files of HMRC's app do (environment variables, `sys.frozen`,
 copies, and then runs HMRC's `manage.py`. The HMRC files are loaded unchanged
 from the installed app at run time, and nothing is written to the HMRC app.
 
-The user can switch to HMRC's own server with **PAYE Launcher > Use Apple
-Silicon Runtime**. If the native runtime cannot start, PAYE Launcher offers
-HMRC's own server.
+The user can switch to HMRC's own server with **PAYE Launcher > Use Built-in
+Runtime**. If the built-in runtime cannot start, PAYE Launcher offers HMRC's
+own server. If PAYE Launcher itself runs in Rosetta ("Open using Rosetta"),
+it starts the arm64 half of the runtime with `arch -arm64`.
+
+## Installing Basic PAYE Tools
+
+If Basic PAYE Tools is not installed, PAYE Launcher offers to install it:
+
+1. It reads the macOS download link from https://www.gov.uk/basic-paye-tools
+   and downloads the zip over HTTPS.
+2. It checks the installer package with `pkgutil --check-signature`: it must be
+   signed with a Developer ID for distribution and notarised by Apple. The
+   signer must have a known Team ID (`6DYLJ52V9Y`, VE3 Global Ltd, which signs
+   HMRC's package and app). If the signer is different, the user is told the
+   signer's name and asked before anything is installed.
+3. If Rosetta is installed (or on an Intel Mac), it opens the package in
+   Apple's Installer, which asks for the user's password, and waits until the
+   app appears.
+4. HMRC's package declares itself for Intel Macs only, so on Apple Silicon
+   without Rosetta the Installer would not run it. Then PAYE Launcher copies the
+   app out of the package instead (the package has no install scripts), checks
+   its code signature and Team ID, and copies it to `/Applications` (or to
+   `~/Applications` if `/Applications` is not writable).
+
+The downloaded files are removed afterwards.
 
 ## Why the runtime contains no HMRC code
 

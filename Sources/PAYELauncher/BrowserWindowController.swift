@@ -11,7 +11,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, WKNav
     let isMain: Bool
     private unowned let app: AppDelegate
     private let overlay = NSView()
-    private let statusLabel = NSTextField(labelWithString: "")
+    private let statusLabel = NSTextField(wrappingLabelWithString: "")
     private let spinner = NSProgressIndicator()
     private var titleObservation: NSKeyValueObservation?
     private var openWhenDone: [ObjectIdentifier: URL] = [:]
@@ -102,6 +102,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate, WKNav
             spinner.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
             statusLabel.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
             statusLabel.topAnchor.constraint(equalTo: spinner.bottomAnchor, constant: 18),
+            statusLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 520),
             statusLabel.widthAnchor.constraint(lessThanOrEqualTo: overlay.widthAnchor, constant: -40),
         ])
         return content

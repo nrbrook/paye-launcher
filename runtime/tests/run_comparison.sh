@@ -7,6 +7,7 @@
 # Usage: runtime/tests/run_comparison.sh [RUNTIME_DIR]
 #   RUNTIME_DIR  default: ~/Library/Caches/PAYELauncher/runtime-build/runtime
 #   BPT_APP      default: /Applications/Basic PAYE Tools.app
+#   RUNTIME_ARCH arm64 or x86_64: test that half of a universal runtime (x86_64 runs in Rosetta)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -37,8 +38,10 @@ stop_servers() {
 }
 trap stop_servers EXIT
 
+ARCH_PREFIX=()
+if [ -n "${RUNTIME_ARCH:-}" ]; then ARCH_PREFIX=(arch "-$RUNTIME_ARCH"); fi
 native_rti() {
-  HOME="$NATIVE_HOME" BPT_RTI_APP="$RTI_APP" "$RUNTIME/python/bin/python2.7" -S -E -B -u "$RUNTIME/bpt_native_boot.py" "$@"
+  HOME="$NATIVE_HOME" BPT_RTI_APP="$RTI_APP" "${ARCH_PREFIX[@]}" "$RUNTIME/python/bin/python2.7" -S -E -B -u "$RUNTIME/bpt_native_boot.py" "$@"
 }
 hmrc_rti() {
   (cd "$RTI_APP/Contents/MacOS" && HOME="$HMRC_HOME" PYTHONUNBUFFERED=1 ./rti "$@")
@@ -61,7 +64,7 @@ check() {  # name, then the command
 }
 
 echo "Basic PAYE Tools: $(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$BPT_APP/Contents/Info.plist")"
-echo "Runtime: $(head -2 "$RUNTIME/BUILD-INFO.txt" 2>/dev/null | tail -1)"
+echo "Runtime: $(head -2 "$RUNTIME/BUILD-INFO.txt" 2>/dev/null | tail -1), testing: ${RUNTIME_ARCH:-$(uname -m)}"
 echo "Work folder: $TMP"
 
 n=0; native_rti startdb > "$OUT/native-startdb.log" 2>&1 || n=$?

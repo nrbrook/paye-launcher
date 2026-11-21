@@ -3,16 +3,57 @@ import PAYELauncherCore
 
 /// The app's dialogs, in plain words for non-technical users.
 enum Alerts {
-    static func notInstalled() {
+    enum InstallChoice { case install, openGovUK, quit }
+
+    static func offerInstall() -> InstallChoice {
         let alert = NSAlert()
         alert.messageText = "Basic PAYE Tools is not installed"
         alert.informativeText = """
-        PAYE Launcher opens the HMRC Basic PAYE Tools that is installed on this Mac. \
-        Download and install Basic PAYE Tools from GOV.UK, then open PAYE Launcher again.
+        PAYE Launcher opens HMRC's Basic PAYE Tools, which is free from GOV.UK.
+
+        PAYE Launcher can download it from GOV.UK now, check that it is HMRC's signed installer, \
+        and install it. You may need to enter your Mac password.
         """
+        alert.addButton(withTitle: "Download and Install")
         alert.addButton(withTitle: "Open GOV.UK")
         alert.addButton(withTitle: "Quit")
-        if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(BPTInstallation.downloadPage) }
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .install
+        case .alertSecondButtonReturn: return .openGovUK
+        default: return .quit
+        }
+    }
+
+    enum InstallFailedChoice { case retry, openGovUK, quit }
+
+    static func installFailed(_ message: String) -> InstallFailedChoice {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Basic PAYE Tools was not installed"
+        alert.informativeText = message
+        alert.addButton(withTitle: "Try Again")
+        alert.addButton(withTitle: "Open GOV.UK")
+        alert.addButton(withTitle: "Quit")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .retry
+        case .alertSecondButtonReturn: return .openGovUK
+        default: return .quit
+        }
+    }
+
+    static func confirmUnknownPublisher(signer: String) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Install from this publisher?"
+        alert.informativeText = """
+        The installer from GOV.UK is signed and notarised for Apple, but by "\(signer)". \
+        This is not the publisher that PAYE Launcher knows for Basic PAYE Tools. HMRC may have changed it.
+
+        Install only if you trust this publisher. If you are not sure, click Cancel and install from GOV.UK yourself.
+        """
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Install")
+        return alert.runModal() == .alertSecondButtonReturn
     }
 
     static func rosettaMissing(canUseNative: Bool, completion: (Bool) -> Void) {
@@ -22,9 +63,10 @@ enum Alerts {
         HMRC's own server is an Intel program. On this Mac it needs Rosetta 2. \
         To install Rosetta, open Terminal and type: softwareupdate --install-rosetta
         """
-        if canUseNative { alert.addButton(withTitle: "Use the Apple Silicon Runtime") }
+        if canUseNative { alert.addButton(withTitle: "Use the Built-in Runtime") }
         alert.addButton(withTitle: "Quit")
-        completion(canUseNative && alert.runModal() == .alertFirstButtonReturn)
+        let response = alert.runModal()
+        completion(canUseNative && response == .alertFirstButtonReturn)
     }
 
     enum PortBusyChoice { case retry, useRunning, quit }
@@ -57,7 +99,7 @@ enum Alerts {
         alert.messageText = "Basic PAYE Tools could not start"
         var text = message
         if offerHMRCServer {
-            text += "\n\nYou can try HMRC's own server instead of the Apple Silicon runtime. It is slower and needs Rosetta 2."
+            text += "\n\nYou can try HMRC's own server instead of the built-in runtime. On Apple Silicon it needs Rosetta 2."
         }
         alert.informativeText = text + "\n\nThe log file has more information."
         alert.addButton(withTitle: "Try Again")

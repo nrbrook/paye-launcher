@@ -1,11 +1,12 @@
-# Native runtime
+# Built-in runtime
 
-`build_runtime.sh` builds the native Apple Silicon runtime from the pinned
+`build_runtime.sh` builds the universal (arm64 and x86_64) built-in runtime from the pinned
 sources in `sources.sh`. See [../docs/how-it-works.md](../docs/how-it-works.md).
 
 | File | Purpose |
 |---|---|
-| `build_runtime.sh` | The build. Output: `~/Library/Caches/PAYELauncher/runtime-build/runtime` |
+| `build_runtime.sh` | The universal build: runs `build_runtime_arch.sh` for arm64 and (in Rosetta) x86_64, then joins the binaries with `lipo`. Output: `~/Library/Caches/PAYELauncher/runtime-build/runtime`. `--join-only` repeats only the join |
+| `build_runtime_arch.sh` | The build of one architecture |
 | `sources.sh` | Versions, URLs and SHA-256 of all sources |
 | `bpt_native_boot.py` | Starts HMRC's installed server code on the native Python (Python 2.7) |
 | `ft__config__.py` | The configuration file that the 4Suite installer normally makes |

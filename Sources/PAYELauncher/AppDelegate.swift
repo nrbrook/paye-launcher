@@ -12,9 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var signalSources: [DispatchSourceSignal] = []
     private let printBridge = PrintBridge()
     private var runtimeMenuItem: NSMenuItem?
+    private var installJob: BPTInstallJob?
+    private var installTimer: Timer?
 
     var nativeRuntime: NativeRuntime? { NativeRuntime.bundled(inResources: Bundle.main.resourceURL) }
-    var canUseNative: Bool { Runtime.isAppleSilicon && nativeRuntime != nil }
+    var canUseNative: Bool { nativeRuntime?.supports(Runtime.machineArchitecture) ?? false }
 
     func log(_ message: String) { logger.write(message) }
 
@@ -51,17 +53,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
 
-    private func boot() {
+    private func findInstallation() -> BPTInstallation? {
         let candidates = NSWorkspace.shared.urlsForApplications(withBundleIdentifier: BPTInstallation.bundleIdentifier)
             + BPTInstallation.defaultCandidates(home: paths.home)
-        guard let install = BPTInstallation.newest(among: candidates) else {
+        return BPTInstallation.newest(among: candidates)
+    }
+
+    private func boot() {
+        guard let install = findInstallation() else {
             log("Basic PAYE Tools is not installed")
-            Alerts.notInstalled()
-            NSApp.terminate(nil)
+            offerInstall()
             return
         }
-        let kind = Runtime.effective(preferred: preferences.runtime, isAppleSilicon: Runtime.isAppleSilicon, native: nativeRuntime)
-        log("Using \(install.appURL.path) version \(install.version), runtime \(kind.rawValue)")
+        let kind = Runtime.effective(preferred: preferences.runtime, machineArchitecture: Runtime.machineArchitecture, native: nativeRuntime)
+        let forceArm64 = kind == .native && Runtime.isAppleSilicon && Runtime.isTranslated
+        log("Using \(install.appURL.path) version \(install.version), runtime \(kind.rawValue) on \(Runtime.machineArchitecture)")
 
         if kind == .hmrc, Runtime.isAppleSilicon, !Runtime.rosettaInstalled() {
             Alerts.rosettaMissing(canUseNative: canUseNative) { [weak self] useNative in
@@ -82,7 +88,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pidFile: PIDFile(url: paths.pidFile),
             runner: ProcessRunner { logger.raw($0) },
             log: { logger.write($0) },
-            makeCommand: { Runtime.command($0, kind: kind, install: install, native: native, baseEnvironment: environment) }
+            makeCommand: {
+                Runtime.command($0, kind: kind, install: install, native: native, baseEnvironment: environment, forceArm64: forceArm64)
+            }
         )
         server.onUnexpectedExit = { code in
             DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.serverStopped(code) }
@@ -98,6 +106,119 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { busy ? self.portBusy(server) : self.prepareAndStart() }
         }
     }
+
+    // MARK: Install Basic PAYE Tools
+
+    private func offerInstall() {
+        switch Alerts.offerInstall() {
+        case .install:
+            startInstall()
+        case .openGovUK:
+            NSWorkspace.shared.open(BPTDownload.pageURL)
+            waitForInstallation(message: "Install Basic PAYE Tools from GOV.UK.\nPAYE Launcher continues when it is installed.")
+        case .quit:
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func startInstall() {
+        let work = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PAYE Launcher install \(UUID().uuidString)", isDirectory: true)
+        let logger = self.logger
+        let job = BPTInstallJob(
+            workDirectory: work,
+            progress: { step in DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.showInstallStep(step) } },
+            log: { logger.write($0) }
+        )
+        installJob = job
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = job.prepare()
+            DispatchQueue.main.async { self.continueInstall(job: job, prepared: result) }
+        }
+    }
+
+    private func continueInstall(job: BPTInstallJob, prepared: Result<URL, BPTInstallError>) {
+        switch prepared {
+        case .success(let package):
+            install(package: package, job: job, allowedTeamIDs: BPTDownload.knownTeamIDs)
+        case .failure(.unknownPublisher(let signer, let package)):
+            log("Unknown installer publisher: \(signer)")
+            if Alerts.confirmUnknownPublisher(signer: signer),
+               let team = PackageSignature.teamIdentifier(inCertificateName: signer) {
+                install(package: package, job: job, allowedTeamIDs: [team])
+            } else {
+                job.cleanUp()
+                installFailed(.untrustedPackage)
+            }
+        case .failure(let error):
+            job.cleanUp()
+            installFailed(error)
+        }
+    }
+
+    private func install(package: URL, job: BPTInstallJob, allowedTeamIDs: Set<String>) {
+        // HMRC's package asks Apple's Installer for an Intel Mac. Without Rosetta,
+        // copy the signed app out of the package instead; the built-in runtime runs it.
+        guard Runtime.isAppleSilicon, !Runtime.rosettaInstalled(), canUseNative else {
+            log("Opening the installer: \(package.path)")
+            NSWorkspace.shared.open(package)
+            waitForInstallation(
+                message: "Follow the steps in the Installer window.\nPAYE Launcher continues when Basic PAYE Tools is installed.",
+                cleanUp: job
+            )
+            return
+        }
+        let destinations = [URL(fileURLWithPath: "/Applications"), paths.home.appendingPathComponent("Applications")]
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = job.installDirectly(package: package, allowedTeamIDs: allowedTeamIDs, destinations: destinations)
+            job.cleanUp()
+            DispatchQueue.main.async {
+                switch result {
+                case .success: self.boot()
+                case .failure(let error): self.installFailed(error)
+                }
+            }
+        }
+    }
+
+    fileprivate func showInstallStep(_ step: BPTInstallJob.Step) {
+        switch step {
+        case .findingDownload: mainWindow?.showStatus("Finding Basic PAYE Tools on GOV.UK…")
+        case .downloading(let fraction?): mainWindow?.showStatus("Downloading Basic PAYE Tools from GOV.UK… \(Int(fraction * 100))%")
+        case .downloading(nil): mainWindow?.showStatus("Downloading Basic PAYE Tools from GOV.UK…")
+        case .checking: mainWindow?.showStatus("Checking the download…")
+        case .installing: mainWindow?.showStatus("Installing Basic PAYE Tools…")
+        }
+    }
+
+    /// Checks every 2 seconds whether Basic PAYE Tools is installed, then starts it.
+    private func waitForInstallation(message: String, cleanUp job: BPTInstallJob? = nil) {
+        mainWindow?.showStatus(message)
+        installTimer?.invalidate()
+        installTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] timer in
+            guard let self, self.findInstallation() != nil else { return }
+            timer.invalidate()
+            self.installTimer = nil
+            self.log("Basic PAYE Tools is now installed")
+            job?.cleanUp()
+            self.installJob = nil
+            self.boot()
+        }
+    }
+
+    private func installFailed(_ error: BPTInstallError) {
+        log("Install failed: \(error)")
+        installJob = nil
+        switch Alerts.installFailed(error.message) {
+        case .retry: startInstall()
+        case .openGovUK:
+            NSWorkspace.shared.open(BPTDownload.pageURL)
+            waitForInstallation(message: "Install Basic PAYE Tools from GOV.UK.\nPAYE Launcher continues when it is installed.")
+        case .quit: NSApp.terminate(nil)
+        }
+    }
+
+    // MARK: Server start-up
 
     private func portBusy(_ server: BPTServer) {
         log("Port \(server.local.port) is already in use")
@@ -249,7 +370,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         text += "Not made by, connected with or endorsed by HMRC.\n"
         if let server {
             text += "\nBasic PAYE Tools \(server.install.version)\n\(server.install.appURL.path)\n"
-            text += server.kind == .native ? "Runtime: Apple Silicon (native)\n" : "Runtime: HMRC server\n"
+            text += server.kind == .native ? "Runtime: built-in (\(Runtime.machineArchitecture))\n" : "Runtime: HMRC server\n"
         }
         text += "\nYour data: \(paths.userData.path)\n\nFree software under the GNU GPL version 3."
         let credits = NSAttributedString(string: text, attributes: [

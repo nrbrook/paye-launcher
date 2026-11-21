@@ -48,7 +48,10 @@ jobs:
           path: ${{ env.RUNTIME_WORK }}/downloads
           key: runtime-downloads-${{ hashFiles('runtime/sources.sh') }}
 
-      - name: Build native runtime
+      - name: Install Rosetta 2 (for the x86_64 half of the runtime)
+        run: sudo softwareupdate --install-rosetta --agree-to-license || true
+
+      - name: Build universal runtime
         run: WORK="$RUNTIME_WORK" runtime/build_runtime.sh
 
       - name: Import Developer ID certificate
@@ -94,13 +97,14 @@ jobs:
           if [ "$SIGNED" = true ]; then args+=(--notarize); fi
           scripts/package_app.sh "${args[@]}"
 
-      - name: Install Rosetta 2 and Basic PAYE Tools
-        run: |
-          sudo softwareupdate --install-rosetta --agree-to-license || true
-          scripts/fetch_bpt.sh
+      - name: Install Basic PAYE Tools from GOV.UK
+        run: scripts/fetch_bpt.sh
 
-      - name: Compare the signed runtime with HMRC's server
-        run: OUT="$RUNNER_TEMP/comparison" runtime/tests/run_comparison.sh "dist/PAYE Launcher.app/Contents/Resources/runtime"
+      - name: Compare the signed runtime with HMRC's server (arm64)
+        run: OUT="$RUNNER_TEMP/comparison-arm64" RUNTIME_ARCH=arm64 runtime/tests/run_comparison.sh "dist/PAYE Launcher.app/Contents/Resources/runtime"
+
+      - name: Compare the signed runtime with HMRC's server (x86_64, in Rosetta)
+        run: OUT="$RUNNER_TEMP/comparison-x86_64" RUNTIME_ARCH=x86_64 runtime/tests/run_comparison.sh "dist/PAYE Launcher.app/Contents/Resources/runtime"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
@@ -129,7 +133,7 @@ jobs:
             echo
             echo "- SHA-256: \`$(cut -d' ' -f1 "dist/PAYE-Launcher-$VERSION.dmg.sha256")\`"
             echo "- Build provenance: \`gh attestation verify PAYE-Launcher-$VERSION.dmg -R ${GITHUB_REPOSITORY}\`"
-            echo "- Native runtime compared with HMRC's own server: all checks passed in this build."
+            echo "- Built-in runtime (arm64 and x86_64) compared with HMRC's own server: all checks passed in this build."
             echo
             echo "PAYE Launcher is not made by, connected with or endorsed by HMRC."
           } > "$notes"

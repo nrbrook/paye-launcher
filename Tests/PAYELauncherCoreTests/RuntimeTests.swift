@@ -4,13 +4,26 @@ import Testing
 
 struct RuntimeTests {
     let install = BPTInstallation(appURL: URL(fileURLWithPath: "/Applications/Basic PAYE Tools.app"), version: "26.1")
-    let native = NativeRuntime(root: URL(fileURLWithPath: "/App/Contents/Resources/runtime"))
+    let native = NativeRuntime(root: URL(fileURLWithPath: "/App/Contents/Resources/runtime"), architectures: ["arm64", "x86_64"])
 
-    @Test func nativeOnlyOnAppleSiliconWithRuntime() {
-        #expect(Runtime.effective(preferred: .native, isAppleSilicon: true, native: native) == .native)
-        #expect(Runtime.effective(preferred: .native, isAppleSilicon: false, native: native) == .hmrc)
-        #expect(Runtime.effective(preferred: .native, isAppleSilicon: true, native: nil) == .hmrc)
-        #expect(Runtime.effective(preferred: .hmrc, isAppleSilicon: true, native: native) == .hmrc)
+    @Test func builtInRuntimeWhenItSupportsThisMac() {
+        #expect(Runtime.effective(preferred: .native, machineArchitecture: "arm64", native: native) == .native)
+        #expect(Runtime.effective(preferred: .native, machineArchitecture: "x86_64", native: native) == .native)
+        #expect(Runtime.effective(preferred: .native, machineArchitecture: "arm64", native: nil) == .hmrc)
+        #expect(Runtime.effective(preferred: .hmrc, machineArchitecture: "arm64", native: native) == .hmrc)
+        let armOnly = NativeRuntime(root: native.root, architectures: ["arm64"])
+        #expect(Runtime.effective(preferred: .native, machineArchitecture: "x86_64", native: armOnly) == .hmrc)
+    }
+
+    @Test func forcesArm64WhenTranslated() {
+        let cmd = Runtime.command(["startdb"], kind: .native, install: install, native: native, baseEnvironment: [:], forceArm64: true)
+        #expect(cmd.executable.path == "/usr/bin/arch")
+        #expect(cmd.arguments == ["-arm64", native.python.path, "-S", "-E", "-B", "-u", native.bootScript.path, "startdb"])
+        #expect(cmd.environment["BPT_RTI_APP"] == install.rtiApp.path)
+    }
+
+    @Test func machineArchitectureIsKnown() {
+        #expect(["arm64", "x86_64"].contains(Runtime.machineArchitecture))
     }
 
     @Test func nativeCommand() {

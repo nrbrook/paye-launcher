@@ -8,9 +8,10 @@ Macs:
 | Job | What it checks |
 |---|---|
 | Lint | SwiftLint (strict), Ruff, ShellCheck, actionlint |
-| Unit tests | `swift test`: finding the HMRC app, the port setting, runtime choice and commands, link rules, file names, preferences, process control, the PID file, and a full start, wait, stop and backup cycle with a fake server |
-| Build native runtime | Builds the runtime from pinned sources, checks that every binary is arm64 and links only to macOS libraries, and runs a self-test |
-| Compare with HMRC's server | Downloads the current Basic PAYE Tools from GOV.UK, then compares the native runtime with HMRC's own server (see below) |
+| Unit tests | `swift test`: finding the HMRC app, the port setting, runtime choice and commands, Mach-O architectures, link rules, the GOV.UK download link, installer signature checks, file names, preferences, process control, the PID file, and a full start, wait, stop and backup cycle with a fake server |
+| Install from GOV.UK | Downloads the real installer from GOV.UK, checks its signature, and installs Basic PAYE Tools into a temporary folder (`PAYE_LAUNCHER_NETWORK_TESTS=1`) |
+| Build universal runtime | Builds both halves from pinned sources, checks that every binary is universal and links only to macOS libraries, and runs a self-test of each half |
+| Compare with HMRC's server | Downloads the current Basic PAYE Tools from GOV.UK, then compares each half of the runtime (arm64, and x86_64 in Rosetta) with HMRC's own server (see below) |
 | Package | Builds the universal app and the DMG (ad-hoc signed) |
 
 The [release workflow](../.github/workflows/release.yml) runs the comparison
@@ -35,7 +36,8 @@ never used. It fails if any result is different:
 
 | Date | Basic PAYE Tools | macOS | Result |
 |---|---|---|---|
-| 2026-11-21 | 26.1.26134.173934 | 27.2.1 (Apple Silicon) | All checks passed: 28 pages, 40 static files, 1,620 net pay results, 36 IRmarks |
+| 2026-11-21 | 26.1.26134.173934 | 27.2.1 (Apple Silicon), arm64 half | All checks passed: 28 pages, 40 static files, 1,620 net pay results, 36 IRmarks |
+| 2026-11-21 | 26.1.26134.173934 | 27.2.1 (Apple Silicon), x86_64 half in Rosetta | All checks passed (the same checks) |
 
 ## Not tested automatically
 
@@ -43,7 +45,9 @@ never used. It fails if any result is different:
   records, and a submission. A submission test would use HMRC's test service,
   never the live service.
 - Printable PDF forms, restore from a backup, and Welsh.
-- The user interface of PAYE Launcher (menus, downloads, printing): test by hand.
+- The user interface of PAYE Launcher (menus, downloads, printing, the install
+  dialogs and Apple's Installer): test by hand.
+- The x86_64 half is tested in Rosetta on Apple Silicon, not on an Intel Mac.
 
 Some library versions are not exactly HMRC's: OpenSSL 3.6.5 (HMRC: 3.6.1),
 zlib from macOS (HMRC: 1.3.2), and Python hashes with OpenSSL instead of its
@@ -54,4 +58,6 @@ built-in hash modules. The comparison shows no difference.
 ```bash
 make test                # unit tests
 make runtime compare     # needs Basic PAYE Tools in /Applications
+RUNTIME_ARCH=x86_64 make compare
+PAYE_LAUNCHER_NETWORK_TESTS=1 swift test --filter downloadsChecksAndInstallsFromGovUK
 ```

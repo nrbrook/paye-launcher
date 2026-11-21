@@ -1,7 +1,7 @@
 import AppKit
 
 enum MainMenu {
-    /// Builds the menu bar. Returns the "Use Apple Silicon Runtime" item, if shown.
+    /// Builds the menu bar. Returns the "Use Built-in Runtime" item, if shown.
     @discardableResult
     static func install(delegate: AppDelegate, showRuntimeOption: Bool) -> NSMenuItem? {
         let main = NSMenu()
@@ -23,7 +23,7 @@ enum MainMenu {
         _ = add(appMenu, "About \(name)", #selector(AppDelegate.showAbout(_:)), target: delegate)
         appMenu.addItem(.separator())
         if showRuntimeOption {
-            runtimeItem = add(appMenu, "Use Apple Silicon Runtime", #selector(AppDelegate.toggleNativeRuntime(_:)), target: delegate)
+            runtimeItem = add(appMenu, "Use Built-in Runtime", #selector(AppDelegate.toggleNativeRuntime(_:)), target: delegate)
             appMenu.addItem(.separator())
         }
         _ = add(appMenu, "Show Data Folder", #selector(AppDelegate.showDataFolder(_:)), target: delegate)

@@ -15,17 +15,18 @@ window, like a normal app.
 
 ## Install
 
-1. **Install Basic PAYE Tools from GOV.UK** if you do not have it:
-   [www.gov.uk/basic-paye-tools](https://www.gov.uk/basic-paye-tools).
-   Keep it installed. PAYE Launcher needs it.
-2. **Download PAYE Launcher**: open the
+1. **Download PAYE Launcher**: open the
    [latest release](https://github.com/nrbrook/paye-launcher/releases/latest)
    and click **PAYE-Launcher-…dmg** under *Assets*.
-3. **Open the downloaded file** and drag **PAYE Launcher** to the
+2. **Open the downloaded file** and drag **PAYE Launcher** to the
    **Applications** folder.
-4. **Open PAYE Launcher** from the Applications folder. The first time, macOS
+3. **Open PAYE Launcher** from the Applications folder. The first time, macOS
    asks if you are sure that you want to open an app from the internet.
    Click **Open**.
+4. **If Basic PAYE Tools is not installed**, PAYE Launcher offers to download
+   it from [GOV.UK](https://www.gov.uk/basic-paye-tools) and install it. It
+   first checks that the download is HMRC's installer, signed and notarised for
+   Apple. Keep Basic PAYE Tools installed: PAYE Launcher needs it.
 
 Basic PAYE Tools then opens in the PAYE Launcher window. You can keep
 PAYE Launcher in the Dock: right-click its icon and choose
@@ -49,8 +50,9 @@ where it always does: the **HMRC** folder in your home folder
 (`~/HMRC/payetools-rti`), with backups in its `backups` folder. To see it,
 choose **PAYE Launcher > Show Data Folder**.
 
-PAYE Launcher sends nothing anywhere. Basic PAYE Tools itself connects to
-HMRC when you send submissions and to GOV.UK to check for updates, as usual.
+PAYE Launcher sends nothing about you anywhere. It connects to GOV.UK only
+when you ask it to download Basic PAYE Tools. Basic PAYE Tools itself connects
+to HMRC when you send submissions and to GOV.UK to check for updates, as usual.
 
 ## Questions
 
@@ -67,31 +69,33 @@ Apple. You can check that a download came from this repository: see
 No. It does not change any HMRC file. The calculations, submissions and
 database are HMRC's own code.
 
-**What is "Use Apple Silicon Runtime"?**
+**What is "Use Built-in Runtime"?**
 HMRC's server program is made for Intel Macs. On Apple Silicon Macs (M1 and
 later) it needs Apple's Rosetta translator, which Apple will remove from future
-versions of macOS. PAYE Launcher includes a native Apple Silicon version of the
-open-source parts (Python and its libraries). It runs HMRC's own, unchanged
-code without Rosetta. This is on by default. Each release is tested to make the
-same results as HMRC's own server (see [docs/testing.md](docs/testing.md)).
-To use HMRC's own server instead, turn off **PAYE Launcher > Use Apple
-Silicon Runtime**. On Intel Macs, PAYE Launcher always uses HMRC's own server.
+versions of macOS. PAYE Launcher includes its own build of the open-source
+parts (Python and its libraries), for both Apple Silicon and Intel. It runs
+HMRC's own, unchanged code without Rosetta. This is on by default. Each release
+is tested to make the same results as HMRC's own server, on both kinds of Mac
+(see [docs/testing.md](docs/testing.md)). To use HMRC's own server instead,
+turn off **PAYE Launcher > Use Built-in Runtime**.
 
 **What if HMRC fixes their app?**
 Then you can use either. PAYE Launcher always uses the installed version of
 Basic PAYE Tools, so HMRC updates work as normal: install them from GOV.UK.
 
 **Which Macs?**
-macOS 13 Ventura or later, Apple Silicon or Intel.
+macOS 13 Ventura or later, Apple Silicon or Intel. PAYE Launcher and its
+built-in runtime are universal: one download works on both.
 
 ## Problems
 
-- **"Basic PAYE Tools is not installed"**: install it from GOV.UK (step 1).
+- **"Basic PAYE Tools is not installed"**: click **Download and Install**, or
+  install it from GOV.UK yourself. PAYE Launcher continues when it is installed.
 - **"Basic PAYE Tools is already running"**: another copy is open, for example
   one that you started in Terminal with HMRC's workaround. Close it, then click
   **Try Again**.
 - **It does not start**: choose **Use HMRC's Server** in the message, or turn
-  off **Use Apple Silicon Runtime**. The log file (**PAYE Launcher > Show Log
+  off **Use Built-in Runtime**. The log file (**PAYE Launcher > Show Log
   File**) has the details.
 - To report a problem, use **Help > Report a Problem with PAYE Launcher**.
   **Do not post payroll or personal data.**
@@ -115,15 +119,16 @@ gh attestation verify PAYE-Launcher-*.dmg -R nrbrook/paye-launcher
 | `Sources/PAYELauncherCore` | Logic: find Basic PAYE Tools, build server commands, run processes, link rules |
 | `Sources/PAYELauncher` | The macOS app (AppKit and WebKit) |
 | `Tests/` | Unit tests (Swift Testing) |
-| `runtime/` | Build of the native Apple Silicon runtime, and its comparison tests |
+| `runtime/` | Build of the universal built-in runtime, and its comparison tests |
 | `scripts/` | Version, packaging, signing, notarisation |
 | `.github/workflows/` | CI for pull requests, and the release workflow |
 
 ```bash
 make test       # unit tests
 make lint       # SwiftLint, Ruff, ShellCheck, actionlint
-make runtime    # build the native runtime (about 3 minutes)
+make runtime    # build the universal runtime (about 8 minutes; needs Rosetta)
 make compare    # compare it with HMRC's server (needs Basic PAYE Tools installed)
+RUNTIME_ARCH=x86_64 make compare   # the same for the Intel half, in Rosetta
 make app        # dist/PAYE Launcher.app and DMG (ad-hoc signed)
 ```
 

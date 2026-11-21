@@ -11,7 +11,7 @@ public final class ProcessRunner: @unchecked Sendable {
         self.output = output
     }
 
-    private func makeProcess(_ command: ServerCommand) -> Process {
+    private func makeProcess(_ command: ServerCommand, endOfOutput: DispatchSemaphore? = nil) -> Process {
         let process = Process()
         process.executableURL = command.executable
         process.arguments = command.arguments
@@ -26,6 +26,7 @@ public final class ProcessRunner: @unchecked Sendable {
             let data = handle.availableData
             if data.isEmpty {
                 handle.readabilityHandler = nil
+                endOfOutput?.signal()
             } else {
                 output(data)
             }
@@ -36,7 +37,8 @@ public final class ProcessRunner: @unchecked Sendable {
     /// Runs a command to the end. Returns the exit status, or nil if it did not
     /// start or did not finish within `timeout` (it is then stopped).
     public func run(_ command: ServerCommand, timeout: TimeInterval) -> Int32? {
-        let process = makeProcess(command)
+        let endOfOutput = DispatchSemaphore(value: 0)
+        let process = makeProcess(command, endOfOutput: endOfOutput)
         let done = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in done.signal() }
         do {
@@ -50,6 +52,9 @@ public final class ProcessRunner: @unchecked Sendable {
             if done.wait(timeout: .now() + 5) == .timedOut { kill(process.processIdentifier, SIGKILL) }
             return nil
         }
+        // All output is delivered before the result. (A child that keeps the
+        // pipe open, such as a background server, ends this wait after 2 s.)
+        _ = endOfOutput.wait(timeout: .now() + 2)
         return process.terminationStatus
     }
 
