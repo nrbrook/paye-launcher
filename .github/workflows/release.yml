@@ -1,0 +1,145 @@
+name: Release
+
+# Run from the Actions tab ("Run workflow"). The version is today's date (UTC),
+# for example 2026.11.21, or 2026.11.21.2 for a second release on the same day.
+on:
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: Create the release as a draft
+        type: boolean
+        default: false
+
+permissions:
+  contents: write       # create the tag and the release
+  id-token: write       # build provenance attestation
+  attestations: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  RUNTIME_WORK: ${{ github.workspace }}/../runtime-build
+
+jobs:
+  release:
+    name: Build, sign, notarise and publish
+    runs-on: macos-15
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version
+        id: version
+        run: |
+          version="$(scripts/version.sh)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version"
+
+      - name: Unit tests
+        run: swift test
+
+      - name: Cache source downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.RUNTIME_WORK }}/downloads
+          key: runtime-downloads-${{ hashFiles('runtime/sources.sh') }}
+
+      - name: Build native runtime
+        run: WORK="$RUNTIME_WORK" runtime/build_runtime.sh
+
+      - name: Import Developer ID certificate
+        id: signing
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          NOTARY_KEY_P8_BASE64: ${{ secrets.NOTARY_KEY_P8_BASE64 }}
+        run: |
+          if [ -z "$P12_BASE64" ]; then
+            echo "::warning::No signing secrets. The release is ad-hoc signed and is created as a draft."
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(uuidgen)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
+          # shellcheck disable=SC2046 # one argument per existing keychain
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')"
+          [ -n "$identity" ] || { echo "No Developer ID Application identity in the certificate"; exit 1; }
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+          echo "$NOTARY_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+
+      - name: Package, sign and notarise
+        env:
+          IDENTITY: ${{ steps.signing.outputs.identity }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          NOTARY_KEY_PATH: ${{ runner.temp }}/notary.p8
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          args=(--runtime "$RUNTIME_WORK/runtime" --version "$VERSION" --sign "$IDENTITY")
+          if [ "$SIGNED" = true ]; then args+=(--notarize); fi
+          scripts/package_app.sh "${args[@]}"
+
+      - name: Install Rosetta 2 and Basic PAYE Tools
+        run: |
+          sudo softwareupdate --install-rosetta --agree-to-license || true
+          scripts/fetch_bpt.sh
+
+      - name: Compare the signed runtime with HMRC's server
+        run: OUT="$RUNNER_TEMP/comparison" runtime/tests/run_comparison.sh "dist/PAYE Launcher.app/Contents/Resources/runtime"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.dmg
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          DRAFT: ${{ inputs.draft }}
+        run: |
+          notes="$RUNNER_TEMP/notes.md"
+          {
+            echo "## Download"
+            echo
+            echo "Download **PAYE-Launcher-$VERSION.dmg** below. Install [Basic PAYE Tools from GOV.UK](https://www.gov.uk/basic-paye-tools) first."
+            echo "See the [installation steps](https://github.com/${GITHUB_REPOSITORY}#install)."
+            echo
+            if [ "$SIGNED" != true ]; then
+              echo "> **Not signed.** This build is ad-hoc signed and not notarised by Apple."
+              echo
+            fi
+            echo "## Checks"
+            echo
+            echo "- SHA-256: \`$(cut -d' ' -f1 "dist/PAYE-Launcher-$VERSION.dmg.sha256")\`"
+            echo "- Build provenance: \`gh attestation verify PAYE-Launcher-$VERSION.dmg -R ${GITHUB_REPOSITORY}\`"
+            echo "- Native runtime compared with HMRC's own server: all checks passed in this build."
+            echo
+            echo "PAYE Launcher is not made by, connected with or endorsed by HMRC."
+          } > "$notes"
+          flags=()
+          if [ "$DRAFT" = true ] || [ "$SIGNED" != true ]; then flags+=(--draft); fi
+          gh release create "v$VERSION" dist/*.dmg dist/*.sha256 \
+            --target "$GITHUB_SHA" --title "PAYE Launcher $VERSION" --notes-file "$notes" "${flags[@]}"
+
+      - name: Remove signing keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2> /dev/null || true
+          rm -f "$RUNNER_TEMP/notary.p8"

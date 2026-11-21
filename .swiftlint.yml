@@ -1,0 +1,58 @@
+included:
+  - Sources
+  - Tests
+  - Package.swift
+excluded:
+  - .build
+
+opt_in_rules:
+  - closure_spacing
+  - contains_over_first_not_nil
+  - empty_count
+  - empty_string
+  - explicit_init
+  - first_where
+  - last_where
+  - modifier_order
+  - redundant_nil_coalescing
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+  - vertical_whitespace_closing_braces
+
+disabled_rules:
+  - todo
+  - force_unwrapping
+  - trailing_comma
+
+line_length:
+  warning: 160
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 600
+  error: 800
+
+type_body_length:
+  warning: 450
+  error: 600
+
+function_body_length:
+  warning: 80
+  error: 120
+
+cyclomatic_complexity:
+  warning: 15
+
+identifier_name:
+  min_length: 2
+  excluded:
+    - fd
+    - id
+    - ok
+    - x
+    - y
+
+large_tuple:
+  warning: 3

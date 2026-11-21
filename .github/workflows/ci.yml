@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUNTIME_WORK: ${{ github.workspace }}/../runtime-build
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install linters
+        run: brew install swiftlint ruff shellcheck actionlint
+      - name: Lint
+        run: make lint
+
+  unit-tests:
+    name: Unit tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+
+  runtime:
+    name: Build native runtime
+    runs-on: macos-15  # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache source downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.RUNTIME_WORK }}/downloads
+          key: runtime-downloads-${{ hashFiles('runtime/sources.sh') }}
+      - name: Build
+        run: WORK="$RUNTIME_WORK" runtime/build_runtime.sh
+      - name: Pack (keeps file permissions)
+        run: tar -C "$RUNTIME_WORK" -czf runtime.tar.gz runtime
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-runtime
+          path: runtime.tar.gz
+          retention-days: 7
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-build-logs
+          path: ${{ env.RUNTIME_WORK }}/logs
+
+  compare:
+    name: Compare with HMRC's server
+    needs: runtime
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-runtime
+      - name: Unpack runtime
+        run: mkdir -p "$RUNTIME_WORK" && tar -C "$RUNTIME_WORK" -xzf runtime.tar.gz
+      - name: Install Rosetta 2 (HMRC's server is Intel only)
+        run: sudo softwareupdate --install-rosetta --agree-to-license || true
+      - name: Install Basic PAYE Tools from GOV.UK
+        run: scripts/fetch_bpt.sh
+      - name: Compare
+        run: OUT="$RUNNER_TEMP/comparison" runtime/tests/run_comparison.sh "$RUNTIME_WORK/runtime"
+      - name: Upload results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparison-results
+          path: ${{ runner.temp }}/comparison
+
+  package:
+    name: Package (ad-hoc signed)
+    needs: [runtime, unit-tests]
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-runtime
+      - name: Unpack runtime
+        run: mkdir -p "$RUNTIME_WORK" && tar -C "$RUNTIME_WORK" -xzf runtime.tar.gz
+      - name: Package
+        run: scripts/package_app.sh --runtime "$RUNTIME_WORK/runtime"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg-unsigned
+          path: dist/*.dmg*
+          retention-days: 14

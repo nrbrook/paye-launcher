@@ -1,0 +1,31 @@
+# Swift
+.build/
+.swiftpm/
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+
+# Build output
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+
+# macOS
+.DS_Store
+
+# Never commit HMRC software, payroll data or backups.
+payetools-rti-*
+*.pkg
+*.bak
+sqlite3.db
+HMRC/
+
+# Signing material
+*.p12
+*.p8
+*.cer
+*.mobileprovision

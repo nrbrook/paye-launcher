@@ -1,0 +1,58 @@
+name: Report a problem
+description: PAYE Launcher does not work as expected
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not include payroll data, names, National Insurance numbers, employer references or other personal information.**
+        The log file can contain such data. Remove it before you attach a log.
+
+        For problems with Basic PAYE Tools itself (calculations, submissions, HMRC services), contact HMRC.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: launcher-version
+    attributes:
+      label: PAYE Launcher version
+      description: PAYE Launcher menu > About PAYE Launcher
+    validations:
+      required: true
+  - type: input
+    id: bpt-version
+    attributes:
+      label: Basic PAYE Tools version
+      description: Also shown in About PAYE Launcher
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Apple menu > About This Mac
+    validations:
+      required: true
+  - type: dropdown
+    id: mac
+    attributes:
+      label: Mac type
+      options:
+        - Apple Silicon (M1, M2, M3 or later)
+        - Intel
+        - I do not know
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Is "Use Apple Silicon Runtime" on? (PAYE Launcher menu)
+      options:
+        - "Yes"
+        - "No"
+        - I do not see this item (Intel Mac)
+  - type: textarea
+    id: log
+    attributes:
+      label: Log extract (optional, with personal data removed)
+      description: PAYE Launcher menu > Show Log File
+      render: text

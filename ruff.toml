@@ -1,0 +1,16 @@
+line-length = 120
+target-version = "py39"
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "BLE"]
+
+[lint.per-file-ignores]
+# These two files run on Python 2.7 (the Basic PAYE Tools runtime), not Python 3.
+"runtime/bpt_native_boot.py" = ["UP", "F821"]
+"runtime/tests/irmark_probe.py" = ["UP", "F821", "E501"]
+"runtime/ft__config__.py" = ["E402", "I"]
+"runtime/patches/patch_setup_openssl3.py" = ["UP"]
+
+[format]
+# Python 2.7 files: the formatter would remove u"" prefixes and change their meaning.
+exclude = ["runtime/bpt_native_boot.py", "runtime/tests/irmark_probe.py", "runtime/ft__config__.py"]

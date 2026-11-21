@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Basic PAYE Tools help (HMRC)
+    url: https://www.gov.uk/government/organisations/hm-revenue-customs/contact/employer-enquiries
+    about: Questions about payroll, calculations or submissions go to HMRC.
+  - name: Basic PAYE Tools service availability and issues (GOV.UK)
+    url: https://www.gov.uk/government/publications/basic-paye-tools-service-availability-and-issues/basic-paye-service-availability-and-issues
+    about: Known problems with Basic PAYE Tools.
+  - name: Security problem
+    url: https://github.com/nrbrook/paye-launcher/security/advisories/new
+    about: Report security problems privately.
