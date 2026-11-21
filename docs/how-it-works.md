@@ -46,7 +46,8 @@ includes a **built-in runtime** and uses it by default on all Macs:
 
 - It is **universal** (arm64 and x86_64), so the same tested runtime runs on
   Apple Silicon and Intel Macs. `build_runtime.sh` builds each half
-  (`build_runtime_arch.sh`; the x86_64 half in Rosetta) and joins every binary
+  (`build_runtime_arch.sh`; the x86_64 half is a cross-build, in which only
+  the new x86_64 Python runs in Rosetta) and joins every binary
   with `lipo`.
 - **Python 2.7.16**, with UCS-2 strings (the same as HMRC's build), with the
   Apple Silicon patches from pyenv.

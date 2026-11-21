@@ -2,6 +2,11 @@ name: Release
 
 # Run from the Actions tab ("Run workflow"). The version is today's date (UTC),
 # for example 2026.11.21, or 2026.11.21.2 for a second release on the same day.
+#
+# Jobs: build (build, sign and notarise the DMG), then compare (the runtime in
+# the signed DMG against HMRC's own server, arm64 and x86_64 at the same time),
+# then publish (attestation and GitHub release). Nothing is published if a
+# comparison fails.
 on:
   workflow_dispatch:
     inputs:
@@ -11,9 +16,7 @@ on:
         default: false
 
 permissions:
-  contents: write       # create the tag and the release
-  id-token: write       # build provenance attestation
-  attestations: write
+  contents: read
 
 concurrency:
   group: release
@@ -23,10 +26,13 @@ env:
   RUNTIME_WORK: ${{ github.workspace }}/../runtime-build
 
 jobs:
-  release:
-    name: Build, sign, notarise and publish
+  build:
+    name: Build, sign and notarise
     runs-on: macos-15
     environment: release
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      signed: ${{ steps.signing.outputs.signed }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -42,17 +48,39 @@ jobs:
       - name: Unit tests
         run: swift test
 
+      - name: Install Rosetta 2 (for the x86_64 half of the runtime)
+        run: sudo softwareupdate --install-rosetta --agree-to-license || true
+
+      # The same cache as CI: a runtime that CI on main built from the same
+      # sources, scripts, SDK and compiler. The comparison jobs below check the
+      # runtime in the signed DMG in any case.
+      - name: Runtime cache key
+        id: runtime-key
+        run: |
+          toolchain="$(xcrun --sdk macosx --show-sdk-version)-$(xcrun clang --version | head -1 | shasum | cut -c1-12)"
+          echo "key=runtime-$toolchain-${{ hashFiles('runtime/**', '!runtime/tests/**', '!runtime/README.md') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache built runtime
+        id: runtime-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.RUNTIME_WORK }}/runtime
+          key: ${{ steps.runtime-key.outputs.key }}
+
       - name: Cache source downloads
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v6
         with:
           path: ${{ env.RUNTIME_WORK }}/downloads
           key: runtime-downloads-${{ hashFiles('runtime/sources.sh') }}
 
-      - name: Install Rosetta 2 (for the x86_64 half of the runtime)
-        run: sudo softwareupdate --install-rosetta --agree-to-license || true
-
       - name: Build universal runtime
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
         run: WORK="$RUNTIME_WORK" runtime/build_runtime.sh
+
+      - name: Show the cached build
+        if: steps.runtime-cache.outputs.cache-hit == 'true'
+        run: cat "$RUNTIME_WORK/runtime/BUILD-INFO.txt"
 
       - name: Import Developer ID certificate
         id: signing
@@ -97,14 +125,69 @@ jobs:
           if [ "$SIGNED" = true ]; then args+=(--notarize); fi
           scripts/package_app.sh "${args[@]}"
 
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-dmg
+          path: |
+            dist/*.dmg
+            dist/*.sha256
+          retention-days: 7
+
+      - name: Remove signing keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2> /dev/null || true
+          rm -f "$RUNNER_TEMP/notary.p8"
+
+      - name: Upload runtime build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-build-logs
+          path: ${{ env.RUNTIME_WORK }}/*/logs
+
+  compare:
+    name: Compare with HMRC's server (${{ matrix.arch }})
+    needs: build
+    runs-on: macos-15
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [arm64, x86_64]  # x86_64 runs in Rosetta, as on an Intel Mac
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-dmg
+          path: dist
+      - name: Install Rosetta 2 (HMRC's server is Intel only)
+        run: sudo softwareupdate --install-rosetta --agree-to-license || true
       - name: Install Basic PAYE Tools from GOV.UK
         run: scripts/fetch_bpt.sh
+      - name: Mount the DMG
+        run: hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" dist/*.dmg
+      - name: Compare the runtime in the DMG with HMRC's server
+        run: OUT="$RUNNER_TEMP/comparison" RUNTIME_ARCH="${{ matrix.arch }}" runtime/tests/run_comparison.sh "$RUNNER_TEMP/dmg/PAYE Launcher.app/Contents/Resources/runtime"
+      - name: Upload results on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: comparison-results-${{ matrix.arch }}
+          path: ${{ runner.temp }}/comparison
 
-      - name: Compare the signed runtime with HMRC's server (arm64)
-        run: OUT="$RUNNER_TEMP/comparison-arm64" RUNTIME_ARCH=arm64 runtime/tests/run_comparison.sh "dist/PAYE Launcher.app/Contents/Resources/runtime"
-
-      - name: Compare the signed runtime with HMRC's server (x86_64, in Rosetta)
-        run: OUT="$RUNNER_TEMP/comparison-x86_64" RUNTIME_ARCH=x86_64 runtime/tests/run_comparison.sh "dist/PAYE Launcher.app/Contents/Resources/runtime"
+  publish:
+    name: Publish
+    needs: [build, compare]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # create the tag and the release
+      id-token: write       # build provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-dmg
+          path: dist
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
@@ -114,8 +197,8 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-          SIGNED: ${{ steps.signing.outputs.signed }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SIGNED: ${{ needs.build.outputs.signed }}
           DRAFT: ${{ inputs.draft }}
         run: |
           notes="$RUNNER_TEMP/notes.md"
@@ -133,17 +216,11 @@ jobs:
             echo
             echo "- SHA-256: \`$(cut -d' ' -f1 "dist/PAYE-Launcher-$VERSION.dmg.sha256")\`"
             echo "- Build provenance: \`gh attestation verify PAYE-Launcher-$VERSION.dmg -R ${GITHUB_REPOSITORY}\`"
-            echo "- Built-in runtime (arm64 and x86_64) compared with HMRC's own server: all checks passed in this build."
+            echo "- Built-in runtime (arm64 and x86_64) in this DMG compared with HMRC's own server: all checks passed."
             echo
             echo "PAYE Launcher is not made by, connected with or endorsed by HMRC."
           } > "$notes"
           flags=()
           if [ "$DRAFT" = true ] || [ "$SIGNED" != true ]; then flags+=(--draft); fi
-          gh release create "v$VERSION" dist/*.dmg dist/*.sha256 \
+          gh release create "v$VERSION" dist/*.dmg dist/*.sha256 -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --title "PAYE Launcher $VERSION" --notes-file "$notes" "${flags[@]}"
-
-      - name: Remove signing keychain
-        if: always()
-        run: |
-          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2> /dev/null || true
-          rm -f "$RUNNER_TEMP/notary.p8"

@@ -11,8 +11,13 @@
 # statically, so the runtime needs only macOS system libraries.
 #
 # Usage:  ARCH=arm64 runtime/build_runtime_arch.sh
-#         arch -x86_64 /bin/bash runtime/build_runtime_arch.sh   (ARCH=x86_64, runs in Rosetta)
+#         ARCH=x86_64 runtime/build_runtime_arch.sh   (on Apple Silicon: needs Rosetta 2)
 # Output: $OUT (default: $WORK/runtime)
+#
+# On Apple Silicon, the x86_64 build is a cross-build: the compilers run
+# natively and make x86_64 code. Only the new x86_64 Python runs in Rosetta,
+# because Python's build and the package builds run it. This is about four
+# times faster than a build that runs completely in Rosetta.
 #
 # Needs: Xcode command line tools, cmake, curl, python3 (macOS has all but cmake).
 set -euo pipefail
@@ -39,14 +44,25 @@ ARCHFLAGS="-arch $ARCH -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
 export ARCHFLAGS
 
 case "$ARCH" in arm64|x86_64) ;; *) echo "ARCH must be arm64 or x86_64" >&2; exit 1 ;; esac
-if [ "$(uname -m)" != "$ARCH" ]; then
-  # Python's build runs the new interpreter, so it must run as $ARCH (x86_64: in Rosetta).
-  echo "Run this build as $ARCH, for example: arch -$ARCH /bin/bash $0" >&2
-  exit 1
-fi
 
 mkdir -p "$DL" "$SRC" "$LOGS"
 rm -rf "$DEPS" "$PREFIX" "$OUT"
+
+if [ "$(uname -m)" != "$ARCH" ]; then
+  # Cross-build of x86_64 on Apple Silicon. Python's build and the package builds
+  # run the new x86_64 interpreter (in Rosetta), and a process started by a
+  # translated process is also translated. This wrapper keeps the compiler native.
+  if [ "$ARCH" != x86_64 ] || ! arch -x86_64 /usr/bin/true 2> /dev/null; then
+    echo "Build ARCH=$ARCH on a Mac of that architecture, or ARCH=x86_64 on Apple Silicon with Rosetta 2." >&2
+    exit 1
+  fi
+  NATIVE_HOST="$(uname -m)"
+  mkdir -p "$WORK/bin"
+  printf '#!/bin/sh\nexec /usr/bin/arch -%s /usr/bin/xcrun clang "$@"\n' "$NATIVE_HOST" > "$WORK/bin/cc"
+  printf '#!/bin/sh\nexec /usr/bin/arch -%s /usr/bin/xcrun clang++ "$@"\n' "$NATIVE_HOST" > "$WORK/bin/c++"
+  chmod +x "$WORK/bin/cc" "$WORK/bin/c++"
+  export CC="$WORK/bin/cc" CXX="$WORK/bin/c++"
+fi
 
 step() { printf '\n==> %s\n' "$*"; }
 fail_with_log() { echo "Failed: $1 (log: $2)" >&2; tail -40 "$2" >&2; exit 1; }
@@ -173,7 +189,8 @@ LIB="$OUT/python/lib/python2.7"
 rm -rf "$LIB"/{test,idlelib,lib-tk,lib2to3,ensurepip,site-packages} \
   "$LIB"/{bsddb/test,ctypes/test,distutils/tests,email/test,json/tests,sqlite3/test,unittest/test} \
   "$LIB"/config/libpython2.7.a "$LIB"/lib-dynload/{_tkinter.so,_testcapi.so,_ctypes_test.so}
-find "$LIB" \( -name '*.pyc' -o -name '*.pyo' -o -name '*.exe' -o -name '*.a' \) -delete
+# Object files (config/python.o) cannot be code signed, and notarisation refuses them.
+find "$LIB" \( -name '*.pyc' -o -name '*.pyo' -o -name '*.exe' -o -name '*.a' -o -name '*.o' \) -delete
 find "$LIB/bpt-native" \( -name '*.c' -o -name '*.h' -o -name '*.pyx' -o -name '*.pxd' \) -delete
 cp "$HERE/bpt_native_boot.py" "$OUT/bpt_native_boot.py"
 # Precompile, so that the signed (read-only) runtime starts fast.

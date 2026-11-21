@@ -6,7 +6,7 @@
 # bpt_native_boot.py loads the HMRC files from the Basic PAYE Tools app that
 # the user installed from GOV.UK.
 #
-# It runs build_runtime_arch.sh twice (natively for arm64, and in Rosetta for
+# It runs build_runtime_arch.sh twice (for arm64, then as a cross-build for
 # x86_64), then joins every binary with lipo.
 #
 # Usage:  runtime/build_runtime.sh
@@ -33,8 +33,8 @@ mkdir -p "$DL"
 if [ "${1:-}" != "--join-only" ]; then
   echo "######## arm64 ########"
   env ARCH=arm64 WORK="$ARM_WORK" OUT="$ARM" DL="$DL" /bin/bash "$HERE/build_runtime_arch.sh"
-  echo "######## x86_64 (Rosetta) ########"
-  arch -x86_64 /usr/bin/env ARCH=x86_64 WORK="$X86_WORK" OUT="$X86" DL="$DL" /bin/bash "$HERE/build_runtime_arch.sh"
+  echo "######## x86_64 (cross-build; the new Python runs in Rosetta) ########"
+  env ARCH=x86_64 WORK="$X86_WORK" OUT="$X86" DL="$DL" /bin/bash "$HERE/build_runtime_arch.sh"
 fi
 
 echo
