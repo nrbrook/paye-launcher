@@ -21,7 +21,7 @@ jobs:
     name: Lint
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install linters
         run: brew install swiftlint ruff shellcheck actionlint
       - name: Lint
@@ -31,7 +31,7 @@ jobs:
     name: Unit tests
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: swift --version
       - name: Build
         run: swift build
@@ -42,7 +42,7 @@ jobs:
     name: Install from GOV.UK (network test)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Download, check and install Basic PAYE Tools into a temporary folder
         run: PAYE_LAUNCHER_NETWORK_TESTS=1 swift test --filter downloadsChecksAndInstallsFromGovUK
 
@@ -50,11 +50,11 @@ jobs:
     name: Build universal runtime
     runs-on: macos-15  # Apple Silicon
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rosetta 2 (for the x86_64 half)
         run: sudo softwareupdate --install-rosetta --agree-to-license || true
       - name: Cache source downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.RUNTIME_WORK }}/downloads
           key: runtime-downloads-${{ hashFiles('runtime/sources.sh') }}
@@ -62,14 +62,14 @@ jobs:
         run: WORK="$RUNTIME_WORK" runtime/build_runtime.sh
       - name: Pack (keeps file permissions)
         run: tar -C "$RUNTIME_WORK" -czf runtime.tar.gz runtime
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: native-runtime
           path: runtime.tar.gz
           retention-days: 7
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-build-logs
           path: ${{ env.RUNTIME_WORK }}/*/logs
@@ -83,8 +83,8 @@ jobs:
       matrix:
         arch: [arm64, x86_64]  # x86_64 runs in Rosetta, as on an Intel Mac
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: native-runtime
       - name: Unpack runtime
@@ -97,7 +97,7 @@ jobs:
         run: OUT="$RUNNER_TEMP/comparison" RUNTIME_ARCH="${{ matrix.arch }}" runtime/tests/run_comparison.sh "$RUNTIME_WORK/runtime"
       - name: Upload results on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: comparison-results-${{ matrix.arch }}
           path: ${{ runner.temp }}/comparison
@@ -107,17 +107,17 @@ jobs:
     needs: [runtime, unit-tests]
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: native-runtime
       - name: Unpack runtime
         run: mkdir -p "$RUNTIME_WORK" && tar -C "$RUNTIME_WORK" -xzf runtime.tar.gz
       - name: Package
         run: scripts/package_app.sh --runtime "$RUNTIME_WORK/runtime"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dmg-unsigned
           path: dist/*.dmg*

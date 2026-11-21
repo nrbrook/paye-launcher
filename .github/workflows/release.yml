@@ -28,7 +28,7 @@ jobs:
     runs-on: macos-15
     environment: release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -43,7 +43,7 @@ jobs:
         run: swift test
 
       - name: Cache source downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.RUNTIME_WORK }}/downloads
           key: runtime-downloads-${{ hashFiles('runtime/sources.sh') }}
@@ -107,7 +107,7 @@ jobs:
         run: OUT="$RUNNER_TEMP/comparison-x86_64" RUNTIME_ARCH=x86_64 runtime/tests/run_comparison.sh "dist/PAYE Launcher.app/Contents/Resources/runtime"
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*.dmg
 
