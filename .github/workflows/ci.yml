@@ -54,7 +54,7 @@ jobs:
       - name: Install Rosetta 2 (for the x86_64 half)
         run: sudo softwareupdate --install-rosetta --agree-to-license || true
       - name: Cache source downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.RUNTIME_WORK }}/downloads
           key: runtime-downloads-${{ hashFiles('runtime/sources.sh') }}
