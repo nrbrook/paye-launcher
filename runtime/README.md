@@ -5,7 +5,7 @@ sources in `sources.sh`. See [../docs/how-it-works.md](../docs/how-it-works.md).
 
 | File | Purpose |
 |---|---|
-| `build_runtime.sh` | The universal build: runs `build_runtime_arch.sh` for arm64 and (in Rosetta) x86_64, then joins the binaries with `lipo`. Output: `~/Library/Caches/PAYELauncher/runtime-build/runtime`. `--join-only` repeats only the join |
+| `build_runtime.sh` | The universal build: runs `build_runtime_arch.sh` for arm64 and then x86_64 (a cross-build: the compilers run natively, and only the new x86_64 Python runs in Rosetta), then joins the binaries with `lipo`. Output: `~/Library/Caches/PAYELauncher/runtime-build/runtime`. `--join-only` repeats only the join |
 | `build_runtime_arch.sh` | The build of one architecture |
 | `sources.sh` | Versions, URLs and SHA-256 of all sources |
 | `bpt_native_boot.py` | Starts HMRC's installed server code on the native Python (Python 2.7) |

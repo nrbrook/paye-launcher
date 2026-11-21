@@ -6,10 +6,13 @@
 2. The workflow:
    - takes today's date (UTC) as the version (`2026.11.21`, then `2026.11.21.2`),
    - runs the unit tests,
-   - builds the native runtime from the pinned sources,
+   - builds the native runtime from the pinned sources, or takes it from the
+     cache that CI on `main` made from the same sources, build scripts, SDK and
+     compiler,
    - builds, signs and notarises the app and the DMG,
-   - compares the signed runtime with HMRC's own server,
-   - makes a build provenance attestation,
+   - compares the runtime in the signed DMG with HMRC's own server, on arm64
+     and on x86_64 (in Rosetta), in two jobs at the same time,
+   - if all checks pass, makes a build provenance attestation,
    - creates the tag `v<version>` and the GitHub release with the DMG and its SHA-256.
 
 If the signing secrets are missing, the workflow makes an ad-hoc signed build

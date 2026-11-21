@@ -53,13 +53,31 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install Rosetta 2 (for the x86_64 half)
         run: sudo softwareupdate --install-rosetta --agree-to-license || true
+      # The built runtime is cached. The key changes with the pinned sources, the
+      # build scripts and patches, the macOS SDK and the compiler.
+      - name: Runtime cache key
+        id: runtime-key
+        run: |
+          toolchain="$(xcrun --sdk macosx --show-sdk-version)-$(xcrun clang --version | head -1 | shasum | cut -c1-12)"
+          echo "key=runtime-$toolchain-${{ hashFiles('runtime/**', '!runtime/tests/**', '!runtime/README.md') }}" >> "$GITHUB_OUTPUT"
+      - name: Cache built runtime
+        id: runtime-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.RUNTIME_WORK }}/runtime
+          key: ${{ steps.runtime-key.outputs.key }}
       - name: Cache source downloads
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v6
         with:
           path: ${{ env.RUNTIME_WORK }}/downloads
           key: runtime-downloads-${{ hashFiles('runtime/sources.sh') }}
       - name: Build
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
         run: WORK="$RUNTIME_WORK" runtime/build_runtime.sh
+      - name: Show the cached build
+        if: steps.runtime-cache.outputs.cache-hit == 'true'
+        run: cat "$RUNTIME_WORK/runtime/BUILD-INFO.txt"
       - name: Pack (keeps file permissions)
         run: tar -C "$RUNTIME_WORK" -czf runtime.tar.gz runtime
       - uses: actions/upload-artifact@v7
