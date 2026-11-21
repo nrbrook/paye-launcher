@@ -2,6 +2,14 @@
 
 **Opens HMRC Basic PAYE Tools on a Mac when the HMRC app does not open.**
 
+**Fully native on Apple Silicon (M1 and later).** HMRC's Basic PAYE Tools is
+an Intel program that needs Apple's Rosetta translator. Apple plans to end
+Rosetta support for Intel apps from autumn 2027 (macOS 28), as HMRC's issues
+page also says.
+PAYE Launcher runs Basic PAYE Tools natively, without Rosetta, and can also
+install it without Rosetta. So it will continue to work on macOS 28 and later.
+It is a universal app, so it works on Intel Macs too.
+
 After some macOS updates, the Basic PAYE Tools app from HMRC does not open
 (see HMRC's
 [service availability and issues page](https://www.gov.uk/government/publications/basic-paye-tools-service-availability-and-issues/basic-paye-service-availability-and-issues)).
