@@ -85,12 +85,26 @@ codesign "${sign_flags[@]}" --entitlements app/entitlements.plist "$APP"
 codesign --verify --deep --strict "$APP"
 
 echo "==> Making the DMG"
-STAGE="$WORK/dmg"
-mkdir -p "$STAGE"
-ditto "$APP" "$STAGE/$APP_NAME.app"
-ln -s /Applications "$STAGE/Applications"
-cp app/dmg-readme.txt "$STAGE/Read Me First.txt"
-hdiutil create -quiet -volname "$APP_NAME $VERSION" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG"
+# The window shows the app, an arrow and the Applications folder. dmgbuild
+# writes the layout without Finder, so this also works on CI.
+PYTHON=""
+for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
+  if command -v "$candidate" > /dev/null \
+    && "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2> /dev/null; then
+    PYTHON="$candidate"; break
+  fi
+done
+[ -n "$PYTHON" ] || { echo "Python 3.10 or later is needed to make the DMG (brew install python)" >&2; exit 1; }
+"$PYTHON" -m venv "$WORK/dmg-venv"
+"$WORK/dmg-venv/bin/pip" install --quiet --disable-pip-version-check \
+  --require-hashes --only-binary :all: -r scripts/dmg-requirements.txt
+swift scripts/make_dmg_background.swift "$WORK/dmg-background" > /dev/null
+tiffutil -cathidpicheck "$WORK/dmg-background/background.png" "$WORK/dmg-background/background@2x.png" \
+  -out "$WORK/dmg-background/background.tiff" 2> /dev/null
+"$WORK/dmg-venv/bin/dmgbuild" -s scripts/dmg_settings.py \
+  -D app="$APP" -D readme=app/dmg-readme.txt -D background="$WORK/dmg-background/background.tiff" \
+  "$APP_NAME $VERSION" "$DMG" > "$WORK/dmgbuild.log" 2>&1 \
+  || { tail -40 "$WORK/dmgbuild.log"; exit 1; }
 if [ "$IDENTITY" != "-" ]; then codesign --force --timestamp --sign "$IDENTITY" "$DMG"; fi
 
 if [ "$NOTARIZE" = 1 ]; then

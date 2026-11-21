@@ -26,8 +26,8 @@ window, like a normal app.
 1. **Download PAYE Launcher**: open the
    [latest release](https://github.com/nrbrook/paye-launcher/releases/latest)
    and click **PAYE-Launcher-…dmg** under *Assets*.
-2. **Open the downloaded file** and drag **PAYE Launcher** to the
-   **Applications** folder.
+2. **Open the downloaded file** and drag **PAYE Launcher** onto the
+   **Applications** folder, as the arrow shows.
 3. **Open PAYE Launcher** from the Applications folder. The first time, macOS
    asks if you are sure that you want to open an app from the internet.
    Click **Open**.
@@ -137,7 +137,7 @@ make lint       # SwiftLint, Ruff, ShellCheck, actionlint
 make runtime    # build the universal runtime (about 8 minutes; needs Rosetta)
 make compare    # compare it with HMRC's server (needs Basic PAYE Tools installed)
 RUNTIME_ARCH=x86_64 make compare   # the same for the Intel half, in Rosetta
-make app        # dist/PAYE Launcher.app and DMG (ad-hoc signed)
+make app        # dist/PAYE Launcher.app and DMG (ad-hoc signed; needs Python 3.10+)
 ```
 
 Read [docs/how-it-works.md](docs/how-it-works.md),
