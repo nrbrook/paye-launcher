@@ -62,14 +62,14 @@ jobs:
         run: WORK="$RUNTIME_WORK" runtime/build_runtime.sh
       - name: Pack (keeps file permissions)
         run: tar -C "$RUNTIME_WORK" -czf runtime.tar.gz runtime
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: native-runtime
           path: runtime.tar.gz
           retention-days: 7
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-build-logs
           path: ${{ env.RUNTIME_WORK }}/*/logs
@@ -97,7 +97,7 @@ jobs:
         run: OUT="$RUNNER_TEMP/comparison" RUNTIME_ARCH="${{ matrix.arch }}" runtime/tests/run_comparison.sh "$RUNTIME_WORK/runtime"
       - name: Upload results on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: comparison-results-${{ matrix.arch }}
           path: ${{ runner.temp }}/comparison
@@ -117,7 +117,7 @@ jobs:
         run: mkdir -p "$RUNTIME_WORK" && tar -C "$RUNTIME_WORK" -xzf runtime.tar.gz
       - name: Package
         run: scripts/package_app.sh --runtime "$RUNTIME_WORK/runtime"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dmg-unsigned
           path: dist/*.dmg*
