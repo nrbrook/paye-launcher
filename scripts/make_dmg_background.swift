@@ -40,24 +40,36 @@ func render(scale: CGFloat) -> Data {
     title.draw(in: NSRect(x: 0, y: height - 62, width: width, height: 28))
 
     // Arrow between the two icons (the icons are 112 points wide).
+    // The shaft is a curve. The head points along the direction of the curve at
+    // its end, and its base is centred on the end of the shaft.
     let y = height - iconY
     let start = NSPoint(x: appX + 88, y: y)
-    let tip = NSPoint(x: applicationsX - 88, y: y)
-    let head: CGFloat = 22
+    let end = NSPoint(x: applicationsX - 108, y: y)
+    let control1 = NSPoint(x: start.x + 45, y: y + 24)
+    let control2 = NSPoint(x: end.x - 55, y: y + 24)
+    let length: CGFloat = 24  // head length
+    let halfWidth: CGFloat = 15
     green.setStroke()
     green.setFill()
     let shaft = NSBezierPath()
     shaft.move(to: start)
-    shaft.curve(to: NSPoint(x: tip.x - head * 0.8, y: y),
-                controlPoint1: NSPoint(x: start.x + 40, y: y + 26),
-                controlPoint2: NSPoint(x: tip.x - 50, y: y + 26))
+    shaft.curve(to: end, controlPoint1: control1, controlPoint2: control2)
     shaft.lineWidth = 7
-    shaft.lineCapStyle = .round
+    shaft.lineCapStyle = .butt
     shaft.stroke()
+    let startCap = NSBezierPath(ovalIn: NSRect(x: start.x - 3.5, y: start.y - 3.5, width: 7, height: 7))
+    startCap.fill()
+
+    let dx = end.x - control2.x
+    let dy = end.y - control2.y
+    let norm = (dx * dx + dy * dy).squareRoot()
+    let direction = NSPoint(x: dx / norm, y: dy / norm)
+    let normal = NSPoint(x: -direction.y, y: direction.x)
+    let tip = NSPoint(x: end.x + direction.x * length, y: end.y + direction.y * length)
     let arrowHead = NSBezierPath()
     arrowHead.move(to: tip)
-    arrowHead.line(to: NSPoint(x: tip.x - head, y: y + head * 0.7))
-    arrowHead.line(to: NSPoint(x: tip.x - head, y: y - head * 0.7))
+    arrowHead.line(to: NSPoint(x: end.x + normal.x * halfWidth, y: end.y + normal.y * halfWidth))
+    arrowHead.line(to: NSPoint(x: end.x - normal.x * halfWidth, y: end.y - normal.y * halfWidth))
     arrowHead.close()
     arrowHead.fill()
 
