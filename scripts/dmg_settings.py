@@ -18,7 +18,9 @@ format = "UDZO"
 filesystem = "HFS+"
 files = [app, (defines["readme"], "Read Me First.txt")]  # noqa: F821
 symlinks = {"Applications": "/Applications"}
-hide_extensions = [app_name, "Read Me First.txt"]
+# Finder always hides ".app". Do not hide it with a flag: the flag is Finder
+# information on the signed bundle, and `codesign --verify --strict` refuses it.
+hide_extensions = ["Read Me First.txt"]
 
 background = defines["background"]  # noqa: F821
 # The frame includes the title bar, and Finder can also show a path bar.

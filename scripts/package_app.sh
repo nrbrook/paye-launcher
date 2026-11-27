@@ -105,6 +105,14 @@ tiffutil -cathidpicheck "$WORK/dmg-background/background.png" "$WORK/dmg-backgro
   -D app="$APP" -D readme=app/dmg-readme.txt -D background="$WORK/dmg-background/background.tiff" \
   "$APP_NAME $VERSION" "$DMG" > "$WORK/dmgbuild.log" 2>&1 \
   || { tail -40 "$WORK/dmgbuild.log"; exit 1; }
+# Check the app as it is in the DMG: the copy must keep a valid, strict signature.
+MOUNT="$WORK/dmg-check"
+mkdir -p "$MOUNT"
+hdiutil attach -quiet -nobrowse -readonly -mountpoint "$MOUNT" "$DMG"
+check_status=0
+codesign --verify --deep --strict "$MOUNT/$APP_NAME.app" || check_status=$?
+hdiutil detach -quiet "$MOUNT"
+[ "$check_status" = 0 ] || { echo "The app in the DMG fails codesign --verify --strict" >&2; exit 1; }
 if [ "$IDENTITY" != "-" ]; then codesign --force --timestamp --sign "$IDENTITY" "$DMG"; fi
 
 if [ "$NOTARIZE" = 1 ]; then
