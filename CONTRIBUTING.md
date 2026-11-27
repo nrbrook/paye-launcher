@@ -35,7 +35,7 @@ make test      # unit tests
 make lint      # linters (install with: brew install swiftlint ruff shellcheck actionlint)
 make runtime   # native runtime
 make compare   # compare it with HMRC's server
-make app       # app and DMG
+make app       # app and DMG (needs Python 3.10 or later)
 ```
 
 See [docs/how-it-works.md](docs/how-it-works.md) for the design.
